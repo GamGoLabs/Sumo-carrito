@@ -1,0 +1,51 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}   # opcional: para generar el AAB firmado
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.7" }
+
+      - name: Pruebas unitarias + APK de prueba (debug)
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SumoCarrito-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reporte-pruebas
+          path: app/build/reports/tests/
+
+      - name: AAB firmado para Play Store (solo si configuraste los secretos)
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        env:
+          SC_STORE_PASSWORD: ${{ secrets.SC_STORE_PASSWORD }}
+          SC_KEY_ALIAS: ${{ secrets.SC_KEY_ALIAS }}
+          SC_KEY_PASSWORD: ${{ secrets.SC_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/sumocarrito.jks"
+          gradle :app:bundleRelease \
+            -PSC_STORE_FILE="$RUNNER_TEMP/sumocarrito.jks" \
+            -PSC_STORE_PASSWORD="$SC_STORE_PASSWORD" \
+            -PSC_KEY_ALIAS="$SC_KEY_ALIAS" \
+            -PSC_KEY_PASSWORD="$SC_KEY_PASSWORD"
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.KEYSTORE_B64 != '' }}
+        with:
+          name: SumoCarrito-AAB
+          path: app/build/outputs/bundle/release/app-release.aab
