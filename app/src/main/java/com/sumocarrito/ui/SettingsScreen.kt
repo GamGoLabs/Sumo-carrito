@@ -1,5 +1,5 @@
 package com.sumocarrito.ui
-
+ 
 import android.app.Activity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,7 +19,7 @@ import com.sumocarrito.billing.Skus
 import com.sumocarrito.domain.InputSanitizer
 import com.sumocarrito.export.Exporter
 import java.math.BigDecimal
-
+ 
 @Composable
 fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -27,7 +27,7 @@ fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
     val pro by vm.isPro.collectAsState()
     val history by vm.history.collectAsState()
     val pct = BigDecimal(100)
-
+ 
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         TextButton(onBack) { Text("← Volver") }
         val hc by vm.highContrast.collectAsState()
@@ -48,7 +48,7 @@ fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
             Switch(s.config.pricesIncludeVat, { vm.setConfig(s.config.copy(pricesIncludeVat = it)) })
             Spacer(Modifier.width(10.dp)); Text("Los precios del anaquel ya incluyen IVA")
         }
-
+ 
         HorizontalDivider()
         Text(if (pro) "SumoCarrito Pro ✔" else "SumoCarrito Pro", style = MaterialTheme.typography.titleMedium)
         if (!pro) {
@@ -63,14 +63,14 @@ fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
                 OutlinedButton({ Exporter.share(ctx, Exporter.pdf(ctx, history), "application/pdf") }, enabled = history.isNotEmpty()) { Text("Exportar PDF") }
             }
             LazyColumn(Modifier.weight(1f)) {
-                items(history, key = { it.id }) {
-                    ListItem(headlineContent = { Text(it.store) },
-                        supportingContent = { Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it.epochMillis))) },
-                        trailingContent = { Text("$ ${it.totalUsd.toPlainString()}") })
+                items(history, key = { h -> h.id }) { h ->
+                    ListItem(headlineContent = { Text(h.store) },
+                        supportingContent = { Text(java.text.DateFormat.getDateTimeInstance().format(java.util.Date(h.epochMillis))) },
+                        trailingContent = { Text("$ ${h.totalUsd.toPlainString()}") })
                 }
             }
         }
-
+ 
         Spacer(Modifier.weight(if (pro) 0.001f else 1f))
         // Banner SOLO aquí (nunca en la pantalla de conteo) y SOLO si no es Pro.
         if (!pro) AndroidView(factory = { c ->
@@ -78,3 +78,4 @@ fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
         }, modifier = Modifier.fillMaxWidth())
     }
 }
+ 
