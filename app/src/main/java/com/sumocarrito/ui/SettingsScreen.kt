@@ -28,7 +28,7 @@ fun SettingsScreen(vm: CartViewModel, onBack: () -> Unit) {
     val history by vm.history.collectAsState()
     val pct = BigDecimal(100)
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().systemBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         TextButton(onBack) { Text("← Volver") }
         val hc by vm.highContrast.collectAsState()
         Row(verticalAlignment = Alignment.CenterVertically) {

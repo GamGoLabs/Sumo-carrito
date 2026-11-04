@@ -20,6 +20,14 @@ object BcvRateParser {
         return BcvRate(value.setScale(4, RoundingMode.HALF_UP), date(html))
     }
 
+    /** Defensa contra datos falsos: la tasa nueva no puede alejarse >25% de la anterior (si hay referencia). */
+    fun plausible(new: BigDecimal, previous: BigDecimal): Boolean {
+        if (new.signum() <= 0) return false
+        if (previous <= BigDecimal.ONE) return true
+        val ratio = new.divide(previous, 4, RoundingMode.HALF_UP)
+        return ratio >= BigDecimal("0.75") && ratio <= BigDecimal("1.25")
+    }
+
     private fun date(html: String): String? {
         val i = html.indexOf("Fecha Valor", ignoreCase = true)
         if (i < 0) return null

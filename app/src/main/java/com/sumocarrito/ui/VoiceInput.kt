@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -13,6 +15,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 
+/** Idiomas a probar en orden. Error 12/13 = idioma no soportado/no disponible en ese teléfono. "" = idioma del sistema. */
+private val LANGS = listOf("es-VE", "es-419", "es-US", "es-ES", "")
+
 /** Devuelve (estaEscuchando, iniciarODetener). Pide el micrófono solo al primer uso. */
 @Composable
 fun rememberVoiceInput(onText: (String) -> Unit, onError: (String) -> Unit): Pair<Boolean, () -> Unit> {
@@ -21,10 +26,11 @@ fun rememberVoiceInput(onText: (String) -> Unit, onError: (String) -> Unit): Pai
     val text by rememberUpdatedState(onText)
     val err by rememberUpdatedState(onError)
     val recognizer = remember { if (SpeechRecognizer.isRecognitionAvailable(ctx)) SpeechRecognizer.createSpeechRecognizer(ctx) else null }
-    DisposableEffect(Unit) { onDispose { recognizer?.destroy() } }
+    val handler = remember { Handler(Looper.getMainLooper()) }
+    DisposableEffect(Unit) { onDispose { handler.removeCallbacksAndMessages(null); recognizer?.destroy() } }
 
-    val begin: () -> Unit = begin@{
-        val r = recognizer ?: run { err("Este teléfono no tiene reconocimiento de voz disponible"); return@begin }
+    fun start(idx: Int) {
+        val r = recognizer ?: run { err("Este teléfono no tiene reconocimiento de voz disponible"); return }
         r.setRecognitionListener(object : RecognitionListener {
             override fun onResults(b: Bundle?) {
                 listening = false
@@ -32,9 +38,17 @@ fun rememberVoiceInput(onText: (String) -> Unit, onError: (String) -> Unit): Pai
                     ?: err("No te escuché, intenta de nuevo")
             }
             override fun onError(code: Int) {
+                if ((code == 12 || code == 13) && idx + 1 < LANGS.size) {      // idioma no soportado → siguiente variante
+                    handler.postDelayed({ start(idx + 1) }, 250); return
+                }
                 listening = false
-                err(if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
-                    "No te escuché, intenta de nuevo" else "Error de voz ($code). Revisa la conexión o los datos de voz del teléfono")
+                err(when (code) {
+                    12, 13 -> "Tu teléfono no tiene el idioma español para dictado. Ve a Ajustes → Sistema → Idioma y entrada → Voz (Google) y descarga Español."
+                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No te escuché, intenta de nuevo"
+                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Sin conexión para el dictado. Descarga el español sin conexión en los ajustes de voz de Google."
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "El reconocedor está ocupado, intenta otra vez"
+                    else -> "Error de voz ($code). Intenta de nuevo"
+                })
             }
             override fun onReadyForSpeech(p: Bundle?) {}
             override fun onBeginningOfSpeech() {}
@@ -46,20 +60,19 @@ fun rememberVoiceInput(onText: (String) -> Unit, onError: (String) -> Unit): Pai
         })
         r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-VE")
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)   // usa el modelo local si está descargado
+            if (LANGS[idx].isNotEmpty()) putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANGS[idx])
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         })
         listening = true
     }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) begin() else err("Permiso de micrófono denegado")
+        if (granted) start(0) else err("Permiso de micrófono denegado")
     }
     val toggle: () -> Unit = {
         when {
-            listening -> { recognizer?.stopListening(); listening = false }
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> begin()
+            listening -> { handler.removeCallbacksAndMessages(null); recognizer?.stopListening(); listening = false }
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED -> start(0)
             else -> launcher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }

@@ -24,4 +24,11 @@ class BcvRateParserTest {
     }
     @Test fun thousandsSeparator() { assertEquals(BigDecimal("1234.5000"), BcvRateParser.parse("USD 1.234,5")!!.rate) }
     @Test fun garbageReturnsNull() { assertEquals(null, BcvRateParser.parse("<html>nada</html>")) }
+    @Test fun plausibility() {
+        assertEquals(true, BcvRateParser.plausible(BigDecimal("40.5"), BigDecimal("39.18")))
+        assertEquals(false, BcvRateParser.plausible(BigDecimal("80"), BigDecimal("39.18")))
+        assertEquals(false, BcvRateParser.plausible(BigDecimal("10"), BigDecimal("39.18")))
+        assertEquals(true, BcvRateParser.plausible(BigDecimal("39"), BigDecimal("1.00")))   // sin referencia previa
+        assertEquals(false, BcvRateParser.plausible(BigDecimal("0"), BigDecimal("39")))
+    }
 }

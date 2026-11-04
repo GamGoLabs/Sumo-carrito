@@ -27,6 +27,9 @@ class SettingsStore @Inject constructor(@ApplicationContext ctx: Context) {
     var pricesIncludeVat: Boolean get() = prefs.getBoolean("incl", false); set(v) = prefs.edit { putBoolean("incl", v) }
     var rateDate: String get() = prefs.getString("rate_date", "")!!; set(v) = prefs.edit { putString("rate_date", v) }
     var highContrast: Boolean get() = prefs.getBoolean("hc", false); set(v) = prefs.edit { putBoolean("hc", v) }
+    /** El usuario aceptó conectar al BCV con certificado no verificable por Android (se fija su huella). */
+    var bcvLenient: Boolean get() = prefs.getBoolean("bcv_lenient", false); set(v) = prefs.edit { putBoolean("bcv_lenient", v) }
+    var bcvPin: String? get() = prefs.getString("bcv_pin", null); set(v) = prefs.edit { if (v == null) remove("bcv_pin") else putString("bcv_pin", v) }
     var isPro: Boolean get() = prefs.getBoolean("pro", false); set(v) = prefs.edit { putBoolean("pro", v) }
 
     /** Passphrase aleatoria de 32 bytes para SQLCipher, generada una sola vez. */

@@ -6,6 +6,7 @@ import com.sumocarrito.billing.BillingManager
 import com.sumocarrito.data.local.PurchaseDao
 import com.sumocarrito.data.local.PurchaseEntity
 import com.sumocarrito.data.prefs.SettingsStore
+import com.sumocarrito.data.rate.BcvCertException
 import com.sumocarrito.data.rate.BcvRateService
 import com.sumocarrito.data.repo.CartRepository
 import com.sumocarrito.domain.*
@@ -27,7 +28,7 @@ data class CartUiState(
     val config: TaxConfig = TaxConfig()
 )
 
-data class RateStatus(val label: String = "", val loading: Boolean = false, val error: String? = null)
+data class RateStatus(val label: String = "", val loading: Boolean = false, val error: String? = null, val needsConsent: Boolean = false)
 
 sealed interface UiEvent { data object BudgetExceeded : UiEvent }
 
@@ -64,28 +65,26 @@ class CartViewModel @Inject constructor(
     private val _rateTick = MutableStateFlow(0)
     val rateTick: StateFlow<Int> = _rateTick
 
-    fun refreshRate() {
+    /** [userConsent] = el usuario pulsó "Obtener de todos modos": autoriza (y reinicia) la huella fijada del BCV. */
+    fun refreshRate(userConsent: Boolean = false) {
         if (_rateStatus.value.loading) return
+        if (userConsent) { prefs.bcvLenient = true; prefs.bcvPin = null }
         viewModelScope.launch {
-            _rateStatus.value = _rateStatus.value.copy(loading = true, error = null)
-            bcv.fetch().onSuccess {
-                rate.value = it.rate; prefs.rate = it.rate.toPlainString()
-                prefs.rateDate = it.dateLabel ?: ""
-                _rateStatus.value = RateStatus(it.dateLabel ?: "")
-                _rateTick.value += 1
+            _rateStatus.value = _rateStatus.value.copy(loading = true, error = null, needsConsent = false)
+            bcv.fetch(lenient = prefs.bcvLenient).onSuccess {
+                if (!BcvRateParser.plausible(it.rate, rate.value)) {
+                    _rateStatus.value = RateStatus(prefs.rateDate, error = "La tasa recibida (${it.rate.toPlainString()}) parece inválida; se conserva la anterior.")
+                } else {
+                    rate.value = it.rate; prefs.rate = it.rate.toPlainString()
+                    prefs.rateDate = it.dateLabel ?: ""
+                    _rateStatus.value = RateStatus(it.dateLabel ?: "")
+                    _rateTick.value += 1
+                }
             }.onFailure {
-                _rateStatus.value = _rateStatus.value.copy(loading = false, error = it.message)
+                _rateStatus.value = RateStatus(prefs.rateDate, error = it.message, needsConsent = it is BcvCertException)
             }
         }
     }
-    val history: StateFlow<List<PurchaseEntity>> = purchases.observeAll()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val uiState: StateFlow<CartUiState> = combine(
-        repo.observeLines(), budget, rate, payment, config
-    ) { lines, b, r, p, c ->
-        CartUiState(lines, engine.calculate(lines, c, r, p, b), b, r, p, c)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CartUiState())
 
     init {
         refreshRate()   // intento silencioso al abrir; si no hay red, se usa la última tasa guardada
